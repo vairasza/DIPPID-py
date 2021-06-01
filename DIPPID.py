@@ -28,6 +28,12 @@ class Sensor():
         while True:
             data, addr = self._sock.recvfrom(1024)
             data_decoded = data.decode()
+
+            ############### HIER ############
+            print(data_decoded) # <---------
+            #################################
+
+
             data_json = json.loads(data_decoded)
             for key, value in data_json.items():
                 self._add_capability(key)
@@ -41,7 +47,7 @@ class Sensor():
         return key in self._capabilities
 
     def _add_capability(self, key):
-        if not has_capabilies(key):
+        if not self.has_capability(key):
             self._capabilities.append(key)
             self._callbacks[key] = []
             self._data[key] = []
@@ -77,13 +83,14 @@ def test_sensor(arg):
     print('the value is ', arg)
 
 if __name__ == '__main__':
+    # Hier ist die IP
     IP = "192.168.178.77"
     PORT = 5700
     test = Sensor(IP, PORT)
     test.connect()
 
     # event
-    test.register_callback('buttons', test_sensor)
+    test.register_callback('button_1', test_sensor)
 
     # polling
     #while(True):
