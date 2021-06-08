@@ -122,7 +122,7 @@ class SensorUDP(Sensor):
             data, addr = self._sock.recvfrom(1024)
             try:
                 data_decoded = data.decode()
-            except UnicodeDecodeErro:
+            except UnicodeDecodeError:
                 continue
             self._update(data_decoded)
 
@@ -152,7 +152,7 @@ class SensorSerial(Sensor):
                 data = self._serial.readline()
                 try:
                     data_decoded = data.decode()
-                except UnicodeDecodeErro:
+                except UnicodeDecodeError:
                     continue
                 self._update(data)
         except:
