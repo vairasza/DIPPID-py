@@ -67,7 +67,7 @@ class Sensor:
         # for each capability, store a list of callback functions
         self._callbacks: dict[str, Mapping] = {}
         # for each capability, store the last value as an object
-        self._data: dict[str, any] = {}
+        self._data: T_Data = {}
         self._receiving: bool = False
         self._last_update: float = time.time()
         Sensor.instances.append(self)
@@ -125,7 +125,7 @@ class Sensor:
         return self._capabilities
 
     # get last value for specified capability
-    def get_value(self, keys: list[CAPABILITES]) -> list[any]:
+    def get_value(self, keys: list[CAPABILITES]) -> T_Data:
         result = {}
 
         for key in keys:
@@ -134,11 +134,16 @@ class Sensor:
         return result
 
     # register a callback function for a change in specified capability
-    def register_callback(self, mapping: Mapping) -> None:
+    def register_callback(self, mapping: Mapping) -> bool:
+        if mapping.key in self._callbacks:
+            return False
+
         for capability in mapping.capabilites:
             self._add_capability(capability)
 
         self._callbacks[mapping.key].append(mapping)
+
+        return True
 
     # remove already registered callback function for specified capability
     def unregister_callback(self, mapping: Mapping) -> bool:
@@ -152,15 +157,10 @@ class Sensor:
 
     def _notify_callbacks(self, key: str) -> None:
         for callback in self._callbacks.values():
-            if not key in callback.capabilites:
+            if not CAPABILITES[key.upper()] in callback.capabilites:
                 continue
 
-            data = {}
-
-            for capability in callback.capabilites:
-                data[capability] = self._data[capability.name]
-
-            callback.func(data)
+            callback.func({[CAPABILITES[key.upper()]]: self._data[key]})
 
 
 # sensor connected via WiFi/UDP
