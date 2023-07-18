@@ -1,33 +1,80 @@
-import sys
-import json
+import json, signal, sys, time
+from typing import Callable, Union, TypedDict
 from threading import Thread
-from time import sleep
-from datetime import datetime
-import signal
+from enum import Enum
 
-# those modules are imported dynamically during runtime
-# they are imported only if the corresponding class is used
-#import socket
-#import serial
-#import wiimote
 
-class Sensor():
+class M5_CAPABILITIES(Enum):
+    BUTTON_1 = "button_1"
+    BUTTON_2 = "button_2"
+    BUTTON_3 = "button_3"
+    ACCELEROMETER = "accelerometer"
+    GYROSCOPE = "gyroscope"
+    ROTATION = "rotation"
+    TEMPERATURE = "temperature"
+
+
+class ANDROID_CAPABILITIES(Enum):
+    BUTTON_1 = "button_1"
+    BUTTON_2 = "button_2"
+    BUTTON_3 = "button_3"
+    BUTTON_4 = "button_4"
+    ACCELEROMETER = "accelerometer"
+    GYROSCOPE = "gyroscope"
+    GRAVITY = "gravity"
+
+
+CAPABILITES = Union[ANDROID_CAPABILITIES, M5_CAPABILITIES]
+
+
+class T_3D(TypedDict):
+    x: float
+    y: float
+    z: float
+
+
+class T_Rotation(TypedDict):
+    pitch: float
+    roll: float
+    yaw: float
+
+
+class T_Data(TypedDict):
+    button_1: int  # 0 / "down" / false; 1 / "up" / true
+    button_2: int
+    button_3: int
+    button_4: int
+    accelerometer: T_3D
+    gyroscope: T_3D
+    rotation: T_Rotation
+    temperature: float
+    gravity: T_3D
+
+
+class Mapping:
+    key: str = None
+    capabilites: list[CAPABILITES] = []
+    func: Callable = None
+
+
+class Sensor:
     # class variable that stores all instances of Sensor
     instances = []
 
-    def __init__(self):
+    def __init__(self) -> None:
         # list of strings which represent capabilites, such as 'buttons' or 'accelerometer'
-        self._capabilities = []
+        self._capabilities: list[CAPABILITES] = []
         # for each capability, store a list of callback functions
-        self._callbacks = {}
+        self._callbacks: dict[str, Mapping] = {}
         # for each capability, store the last value as an object
-        self._data = {}
-        self._receiving = False
+        self._data: dict[str, any] = {}
+        self._receiving: bool = False
+        self._last_update: float = time.time()
         Sensor.instances.append(self)
 
     # stops the loop in _receive() and kills the thread
     # so the program can terminate smoothly
-    def disconnect(self):
+    def disconnect(self) -> None:
         self._receiving = False
         Sensor.instances.remove(self)
         if self._connection_thread:
@@ -36,15 +83,23 @@ class Sensor():
     # runs as a thread
     # receives json formatted data from sensor,
     # stores it and notifies callbacks
-    def _update(self, data):
+    def _update(self, data: str | bytes | bytearray) -> None:
         try:
-            data_json = json.loads(data)
+            data_json: dict[str, any] = json.loads(data)
         except json.decoder.JSONDecodeError:
             # incomplete data
             return
 
+        self._last_update = time.time()
+
         for key, value in data_json.items():
-            self._add_capability(key)
+            key_type: CAPABILITES = CAPABILITES[key.upper()]
+            self._add_capability(key_type)
+
+            if type(value) == dict:
+                value["last_update"] = time.time()
+            else:
+                value = {"value": value, "last_update": time.time()}
 
             # do not notify callbacks on initialization
             if self._data[key] == []:
@@ -54,61 +109,72 @@ class Sensor():
             # notify callbacks only if data has changed
             if self._data[key] != value:
                 self._data[key] = value
-                self._notify_callbacks(key)
+                self._notify_callbacks(key_type)
 
     # checks if capability is available
-    def has_capability(self, key):
+    def has_capability(self, key: CAPABILITES) -> bool:
         return key in self._capabilities
 
-    def _add_capability(self, key):
+    def _add_capability(self, key: CAPABILITES) -> None:
         if not self.has_capability(key):
             self._capabilities.append(key)
-            self._callbacks[key] = []
-            self._data[key] = []
+            self._data[key.name] = []
 
     # returns a list of all current capabilities
-    def get_capabilities(self):
+    def get_capabilities(self) -> list[CAPABILITES]:
         return self._capabilities
 
     # get last value for specified capability
-    def get_value(self, key):
-        try:
-            return self._data[key]
-        except KeyError:
-            # notification when trying to get values for a non-existent capability
-            #raise KeyError(f'"{key}" is not a capability of this sensor.')
-            return None
+    def get_value(self, keys: list[CAPABILITES]) -> list[any]:
+        result = {}
+
+        for key in keys:
+            result[key.name] = self._data[key.name]
+
+        return result
 
     # register a callback function for a change in specified capability
-    def register_callback(self, key, func):
-        self._add_capability(key)
-        self._callbacks[key].append(func)
+    def register_callback(self, mapping: Mapping) -> None:
+        for capability in mapping.capabilites:
+            self._add_capability(capability)
+
+        self._callbacks[mapping.key].append(mapping)
 
     # remove already registered callback function for specified capability
-    def unregister_callback(self, key, func):
-        if key in self._callbacks:
-            self._callbacks[key].remove(func)
+    def unregister_callback(self, mapping: Mapping) -> bool:
+        if mapping.key in self._callbacks:
+            self._callbacks[mapping.key].remove(mapping)
             return True
+
         else:
             # in case somebody wants to check if the callback was present before
             return False
 
-    def _notify_callbacks(self, key):
-        for func in self._callbacks[key]:
-            func(self._data[key])
+    def _notify_callbacks(self, key: str) -> None:
+        for callback in self._callbacks.values():
+            if not key in callback.capabilites:
+                continue
+
+            data = {}
+
+            for capability in callback.capabilites:
+                data[capability] = self._data[capability.name]
+
+            callback.func(data)
+
 
 # sensor connected via WiFi/UDP
 # initialized with a UDP port
 # listens to all IPs by default
 # requires the socket module
 class SensorUDP(Sensor):
-    def __init__(self, port, ip='0.0.0.0'):
+    def __init__(self, port: int, ip: str = "0.0.0.0") -> None:
         Sensor.__init__(self)
         self._ip = ip
         self._port = port
         self._connect()
 
-    def _connect(self):
+    def _connect(self) -> None:
         import socket
 
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -116,7 +182,7 @@ class SensorUDP(Sensor):
         self._connection_thread = Thread(target=self._receive)
         self._connection_thread.start()
 
-    def _receive(self):
+    def _receive(self) -> None:
         self._receiving = True
         while self._receiving:
             data, addr = self._sock.recvfrom(1024)
@@ -125,6 +191,7 @@ class SensorUDP(Sensor):
             except UnicodeDecodeError:
                 continue
             self._update(data_decoded)
+
 
 # sensor connected via serial connection (USB)
 # initialized with a path to a TTY (e.g. /dev/ttyUSB0)
@@ -159,6 +226,7 @@ class SensorSerial(Sensor):
             # connection lost, try again
             self._connect()
 
+
 # uses a Nintendo Wiimote as a sensor (connected via Bluetooth)
 # initialized with a Bluetooth address
 # requires wiimote.py (https://github.com/RaphaelWimmer/wiimote.py)
@@ -184,16 +252,16 @@ class SensorWiimote(Sensor):
             y = self._wiimote.accelerometer[1]
             z = self._wiimote.accelerometer[2]
             data_string = f'{{"x":{x},"y":{y},"z":{z}}}'
-            self._update('accelerometer', data_string)
+            self._update("accelerometer", data_string)
 
             for button in buttons:
                 state = int(self._wiimote.buttons[button])
-                self._update(f'button_' + button.lower(), state)
-            sleep(0.001)
+                self._update(f"button_" + button.lower(), state)
+            time.sleep(0.001)
 
     def _update(self, key, value):
         self._add_capability(key)
-        
+
         # do not notify callbacks on initialization
         if self._data[key] == []:
             self._data[key] = value
@@ -204,10 +272,12 @@ class SensorWiimote(Sensor):
             self._data[key] = value
             self._notify_callbacks(key)
 
+
 # close the program softly when ctrl+c is pressed
 def handle_interrupt_signal(signal, frame):
     for sensor in Sensor.instances:
         sensor.disconnect()
-    sys.exit(0)
+        sys.exit(0)
+
 
 signal.signal(signal.SIGINT, handle_interrupt_signal)
