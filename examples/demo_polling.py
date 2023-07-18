@@ -16,7 +16,7 @@ while True:
     print("capabilities: ", sensor.get_capabilities())
 
     # check if the sensor has the 'accelerometer' capability
-    if sensor.has_capability(M5_CAPA.ACCELEROMETER):
+    if sensor.has_capabilities([M5_CAPA.ACCELEROMETER]):
         data = sensor.get_value([M5_CAPA.ACCELEROMETER])
 
         # print whole accelerometer object (dictionary)
@@ -32,7 +32,7 @@ while True:
         example_counter = 0
         break
 
-    # Example 2 for M5 Stack for two capabilities
+# Example 2 for M5 Stack for two capabilities
 
 while True:
     # print all capabilities of the sensor

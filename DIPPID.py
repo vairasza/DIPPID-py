@@ -124,10 +124,7 @@ class Sensor:
                 self._data[key] = value
                 self._notify_callbacks(key_type)
 
-    # checks if capability is available
-    def has_capability(self, key: CAPABILITES) -> bool:
-        return key in self._capabilities
-
+    # checks if capabilities are available
     def has_capabilities(self, keys: list[CAPABILITES]) -> bool:
         return set(keys).issubset(self._capabilities)
 

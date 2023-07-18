@@ -2,6 +2,12 @@
 
 Python receiver for the "Data Interchange Protocol for Prototyping Input Devices".
 
+# Add to current directory (macos and linux)
+
+```
+curl -O https://github.com/vairasza/DIPPID-py/blob/main/DIPPID.py
+```
+
 # Sensor
 
 ## Instance Variables
