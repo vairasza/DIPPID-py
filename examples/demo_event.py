@@ -1,23 +1,40 @@
-from DIPPID import SensorUDP
-#from DIPPID import SensorSerial
-#from DIPPID import SensorWiimote
+from DIPPID import SensorUDP, M5_CAPA, Mapping, T_Data
 
 # use UPD (via WiFi) for communication
 PORT = 5700
 sensor = SensorUDP(PORT)
 
-# use the serial connection (USB) for communication
-#TTY = '/dev/ttyUSB0'
-#sensor = SensorSerial(TTY)
 
-# use a Wiimote (via Bluetooth) for communication
-#BTADDR = '18:2A:7B:F4:BC:65'
-#sensor = SensorWiimote(BTADDR)
+# Example for M5 Stack
 
-def handle_button_press(data):
-    if int(data) == 0:
-        print('button released')
-    else:
-        print('button pressed')
 
-sensor.register_callback('button_1', handle_button_press)
+def callback(data: T_Data):
+    if M5_CAPA.BUTTON_1.value in data:
+        if data["button_1"]["pressed"] == 0:
+            print("button released")
+        else:
+            print("button pressed")
+
+    elif M5_CAPA.ROTATION.value in data:
+        # read values from data
+        print("rotation pitch angle: ", data["rotation"]["pitch"])
+        print("rotation pitch last update: ", data["rotation"]["last_update"])
+
+
+mapping = Mapping()
+mapping.key = "test"
+mapping.capabilites = [M5_CAPA.BUTTON_1, M5_CAPA.ROTATION, M5_CAPA.TEMPERATURE]
+mapping.func = callback
+
+success = sensor.register_callback(mapping)
+print(f"registering callback function worked: {success}")
+
+success = sensor.register_callback(mapping)
+print(
+    f"registering callback function worked: {success}"
+)  # key already exists => function not added
+
+success = sensor.unregister_callback(mapping)
+print(
+    f"unregistering callback function worked: {success}"
+)  # key already exists => function not added
