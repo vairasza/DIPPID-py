@@ -16,6 +16,8 @@ Python receiver for the "Data Interchange Protocol for Prototyping Input Devices
 
 `has_capability(key: CAPABILITIES) -> bool`: returns a boolean value indicating the exisitng of the CAPABILITES in `_capabilties`
 
+`has_capabilities(self, keys: list[CAPABILITES]) -> bool`: returns a boolean value that indicates if keys is a subset of `_capabilties`
+
 `get_capabilities() -> list[CAPABILITES]`: returns `_capabilties`
 
 `get_value(self, keys: list[CAPABILITES]) -> T_Data`: returns T_Data but only keys that are passed in `keys`

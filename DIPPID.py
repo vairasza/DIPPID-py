@@ -4,7 +4,7 @@ from threading import Thread
 from enum import Enum
 
 
-class M5_CAPABILITIES(Enum):
+class M5_CAPA(Enum):
     BUTTON_1 = "button_1"
     BUTTON_2 = "button_2"
     BUTTON_3 = "button_3"
@@ -14,7 +14,7 @@ class M5_CAPABILITIES(Enum):
     TEMPERATURE = "temperature"
 
 
-class ANDROID_CAPABILITIES(Enum):
+class ANDROID_CAPA(Enum):
     BUTTON_1 = "button_1"
     BUTTON_2 = "button_2"
     BUTTON_3 = "button_3"
@@ -24,37 +24,50 @@ class ANDROID_CAPABILITIES(Enum):
     GRAVITY = "gravity"
 
 
-CAPABILITES = Union[ANDROID_CAPABILITIES, M5_CAPABILITIES]
+CAPABILITES = Union[ANDROID_CAPA, M5_CAPA]
 
 
 class T_3D(TypedDict):
     x: float
     y: float
     z: float
+    last_update: float
 
 
 class T_Rotation(TypedDict):
     pitch: float
     roll: float
     yaw: float
+    last_update: float
 
 
-class T_Data(TypedDict):
-    button_1: int  # 0 / "down" / false; 1 / "up" / true
-    button_2: int
-    button_3: int
-    button_4: int
+# 0 / "down"; 1 / "up"
+class T_Button(TypedDict):
+    pressed: int
+    last_update: float
+
+
+class T_Temperature(TypedDict):
+    degree: float
+    last_update: float
+
+
+class T_Data(TypedDict, total=False):
+    button_1: T_Button
+    button_2: T_Button
+    button_3: T_Button
+    button_4: T_Button
     accelerometer: T_3D
     gyroscope: T_3D
     rotation: T_Rotation
-    temperature: float
+    temperature: T_Temperature
     gravity: T_3D
 
 
 class Mapping:
     key: str = None
     capabilites: list[CAPABILITES] = []
-    func: Callable = None
+    func: Callable[[T_Data], None] = None
 
 
 class Sensor:
@@ -69,7 +82,7 @@ class Sensor:
         # for each capability, store the last value as an object
         self._data: T_Data = {}
         self._receiving: bool = False
-        self._last_update: float = time.time()
+        self._last_update: float = time.time()  # TODO: implement heartbeat
         Sensor.instances.append(self)
 
     # stops the loop in _receive() and kills the thread
@@ -114,6 +127,9 @@ class Sensor:
     # checks if capability is available
     def has_capability(self, key: CAPABILITES) -> bool:
         return key in self._capabilities
+
+    def has_capabilities(self, keys: list[CAPABILITES]) -> bool:
+        return set(keys).issubset(self._capabilities)
 
     def _add_capability(self, key: CAPABILITES) -> None:
         if not self.has_capability(key):
@@ -160,7 +176,7 @@ class Sensor:
             if not CAPABILITES[key.upper()] in callback.capabilites:
                 continue
 
-            callback.func({[CAPABILITES[key.upper()]]: self._data[key]})
+            callback.func({[key]: self._data[key]})
 
 
 # sensor connected via WiFi/UDP
@@ -185,7 +201,7 @@ class SensorUDP(Sensor):
     def _receive(self) -> None:
         self._receiving = True
         while self._receiving:
-            data, addr = self._sock.recvfrom(1024)
+            data, *_ = self._sock.recvfrom(1024)
             try:
                 data_decoded = data.decode()
             except UnicodeDecodeError:
